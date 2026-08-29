@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import {
@@ -75,6 +76,11 @@ export default async function DashboardPage() {
     .maybeSingle();
   const target = goal ? Number((goal as { target_value: unknown }).target_value) : null;
 
+  const { count: revisionDue } = await supabase
+    .from("important_questions")
+    .select("id", { count: "exact", head: true })
+    .in("revision_status", ["NOT_STARTED", "IN_PROGRESS"]);
+
   const t = totals(stats);
   const solved = t.attempted;
   const goalPct =
@@ -108,6 +114,16 @@ export default async function DashboardPage() {
           value={overall === null ? "—" : `${overall.toFixed(1)}%`}
         />
       </div>
+
+      <Link
+        href="/revision"
+        className="mt-3 flex items-center justify-between rounded-xl border border-sky-200 bg-sky-50 px-4 py-3 dark:border-sky-900 dark:bg-sky-950"
+      >
+        <span className="font-medium">Revision Due</span>
+        <span className="font-semibold text-sky-700 dark:text-sky-300">
+          {revisionDue ?? 0}
+        </span>
+      </Link>
 
       <h2 className="mb-2 mt-6 text-sm font-semibold text-zinc-500">
         By subject

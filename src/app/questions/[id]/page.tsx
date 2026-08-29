@@ -1,6 +1,7 @@
 import { notFound, redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import QuestionDetail from "../question-detail";
+import { fetchRevisions, type RevisionRecord } from "@/lib/revisions";
 import type { ImportantQuestion, TopicOption } from "@/lib/questions";
 
 export default async function QuestionDetailPage({
@@ -28,6 +29,13 @@ export default async function QuestionDetailPage({
     .from("topics")
     .select("id, subject, name")
     .eq("student_id", user.id);
+
+  let revisions: RevisionRecord[] = [];
+  try {
+    revisions = await fetchRevisions(supabase, id);
+  } catch {
+    revisions = [];
+  }
 
   const question: ImportantQuestion = {
     id: q.id,
@@ -60,6 +68,7 @@ export default async function QuestionDetailPage({
       topicName={topicName}
       topics={topicOpts}
       userId={user.id}
+      revisions={revisions}
     />
   );
 }

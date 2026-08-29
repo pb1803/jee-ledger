@@ -55,6 +55,27 @@ export const REVISION_LABELS: Record<RevisionStatus, string> = {
   DONE: "Done",
 };
 
+export type RevisionOutcome = "RECALLED" | "PARTIAL" | "FORGOTTEN";
+
+export const REVISION_OUTCOME_LABELS: Record<RevisionOutcome, string> = {
+  RECALLED: "Recalled",
+  PARTIAL: "Partial",
+  FORGOTTEN: "Forgot",
+};
+
+// Simple, understandable transition from a revision outcome to question status.
+export function revisionOutcomeToStatus(
+  outcome: RevisionOutcome,
+): RevisionStatus {
+  switch (outcome) {
+    case "RECALLED":
+      return "DONE";
+    case "PARTIAL":
+    case "FORGOTTEN":
+      return "IN_PROGRESS";
+  }
+}
+
 export function isValidHttpUrl(value: string): boolean {
   try {
     const u = new URL(value);

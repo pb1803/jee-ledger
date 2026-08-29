@@ -6,12 +6,15 @@ import { createClient } from "@/lib/supabase/client";
 import QuestionForm from "./question-form";
 import DeleteQuestionButton from "./delete-question-button";
 import { getSignedImageUrl } from "@/lib/image";
+import { recordRevision, type RevisionRecord } from "@/lib/revisions";
 import { prettySubject } from "@/lib/study";
 import {
   INPUT_TYPE_LABELS,
   PRIORITY_LABELS,
   REVISION_LABELS,
+  REVISION_OUTCOME_LABELS,
   type ImportantQuestion,
+  type RevisionOutcome,
   type TopicOption,
 } from "@/lib/questions";
 
@@ -29,17 +32,46 @@ export default function QuestionDetail({
   topicName,
   topics,
   userId,
+  revisions,
 }: {
   question: ImportantQuestion;
   topicName: string | null;
   topics: TopicOption[];
   userId: string;
+  revisions: RevisionRecord[];
 }) {
   const router = useRouter();
   const [editing, setEditing] = useState(false);
 
   const [imgUrl, setImgUrl] = useState<string | null>(null);
   const [imgErr, setImgErr] = useState<string | null>(null);
+
+  // Revision recording UI state.
+  const [showRevForm, setShowRevForm] = useState(false);
+  const [outcome, setOutcome] = useState<RevisionOutcome | null>(null);
+  const [revNotes, setRevNotes] = useState("");
+  const [savingRev, setSavingRev] = useState(false);
+  const [revErr, setRevErr] = useState<string | null>(null);
+
+  async function saveRevision() {
+    if (!outcome) return;
+    setSavingRev(true);
+    setRevErr(null);
+    try {
+      const supabase = createClient();
+      await recordRevision(supabase, question.id, outcome, revNotes);
+      setShowRevForm(false);
+      setOutcome(null);
+      setRevNotes("");
+      router.refresh();
+    } catch (err) {
+      setRevErr(
+        err instanceof Error ? err.message : "Could not save revision.",
+      );
+    } finally {
+      setSavingRev(false);
+    }
+  }
 
   useEffect(() => {
     if (question.input_type === "IMAGE" && question.image_path) {
@@ -136,6 +168,113 @@ export default function QuestionDetail({
               )}
             </div>
           )}
+
+          <div className="mt-3 rounded-xl border border-zinc-200 p-4 dark:border-zinc-800">
+            <div className="flex items-center justify-between">
+              <h2 className="font-semibold">Revision</h2>
+              {!showRevForm && (
+                <button
+                  type="button"
+                  onClick={() => setShowRevForm(true)}
+                  className="rounded-lg bg-sky-600 px-3 py-1.5 text-sm font-semibold text-white"
+                >
+                  Mark as Revised
+                </button>
+              )}
+            </div>
+
+            {!showRevForm ? (
+              <p className="mt-2 text-sm text-zinc-500">
+                Status: {REVISION_LABELS[question.revision_status]}
+              </p>
+            ) : (
+              <div className="mt-3 flex flex-col gap-3">
+                <p className="text-sm font-medium">How did you remember it?</p>
+                <div className="flex gap-2">
+                  {(["RECALLED", "PARTIAL", "FORGOTTEN"] as RevisionOutcome[]).map(
+                    (o) => (
+                      <button
+                        key={o}
+                        type="button"
+                        onClick={() => setOutcome(o)}
+                        className={`flex-1 rounded-lg border px-2 py-2 text-sm font-medium ${
+                          outcome === o
+                            ? "border-sky-600 bg-sky-600 text-white"
+                            : "border-zinc-300 text-zinc-600 dark:border-zinc-700"
+                        }`}
+                      >
+                        {REVISION_OUTCOME_LABELS[o]}
+                      </button>
+                    ),
+                  )}
+                </div>
+                <label className="flex flex-col gap-1 text-sm">
+                  <span className="text-zinc-500">Revision notes (optional)</span>
+                  <textarea
+                    value={revNotes}
+                    onChange={(e) => setRevNotes(e.target.value)}
+                    rows={2}
+                    className="rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-900"
+                  />
+                </label>
+                {revErr && (
+                  <p className="text-sm text-red-600" role="alert">
+                    {revErr}
+                  </p>
+                )}
+                <div className="flex gap-2">
+                  <button
+                    type="button"
+                    onClick={saveRevision}
+                    disabled={!outcome || savingRev}
+                    className="flex-1 rounded-lg bg-sky-600 px-3 py-2.5 font-semibold text-white disabled:opacity-60"
+                  >
+                    {savingRev ? "Saving…" : "Save Revision"}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShowRevForm(false);
+                      setOutcome(null);
+                      setRevNotes("");
+                      setRevErr(null);
+                    }}
+                    disabled={savingRev}
+                    className="rounded-lg border border-zinc-300 px-3 py-2.5 font-medium dark:border-zinc-700"
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </div>
+            )}
+
+            <h3 className="mb-1 mt-4 text-sm font-semibold text-zinc-500">
+              Revision History
+            </h3>
+            {revisions.length === 0 ? (
+              <p className="text-sm text-zinc-500">Not revised yet.</p>
+            ) : (
+              <ul className="flex flex-col gap-2">
+                {revisions.map((r) => (
+                  <li key={r.id} className="text-sm">
+                    <div className="flex justify-between gap-3">
+                      <span className="font-medium">
+                        {new Date(r.revision_date).toLocaleDateString()}
+                      </span>
+                      <span className="text-zinc-500">
+                        {r.outcome ? REVISION_OUTCOME_LABELS[r.outcome] : "—"}
+                      </span>
+                    </div>
+                    {r.notes && (
+                      <p className="mt-0.5 whitespace-pre-wrap text-zinc-500">
+                        {r.notes}
+                      </p>
+                    )}
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
 
           <div className="mt-4 flex gap-2">
             <button
