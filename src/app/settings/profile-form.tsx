@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import type { ExamTarget, ProfileRow } from "@/lib/types";
 
@@ -13,6 +14,7 @@ export function ProfileForm({
   initial: ProfileRow | null;
   email: string;
 }) {
+  const router = useRouter();
   const [displayName, setDisplayName] = useState(initial?.display_name ?? "");
   const [grade, setGrade] = useState<string>(
     initial?.grade ? String(initial.grade) : "11",
@@ -62,7 +64,7 @@ export function ProfileForm({
   async function onSignOut() {
     const supabase = createClient();
     await supabase.auth.signOut();
-    window.location.href = "/login";
+    router.push("/login");
   }
 
   return (
