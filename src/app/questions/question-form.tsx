@@ -14,6 +14,11 @@ import {
   type RevisionStatus,
   type TopicOption,
 } from "@/lib/questions";
+import {
+  deleteQuestionImage,
+  processImageFile,
+  uploadQuestionImage,
+} from "@/lib/image";
 
 const SUBJECTS: Subject[] = ["PHYSICS", "CHEMISTRY", "MATHEMATICS"];
 const PRIORITIES: Priority[] = ["LOW", "MEDIUM", "HIGH"];
@@ -58,7 +63,11 @@ export default function QuestionForm({
     initial?.priority ?? "MEDIUM",
   );
   const [inputType, setInputType] = useState<InputType>(
-    initial?.input_type === "URL" ? "URL" : "TEXT",
+    initial?.input_type === "URL"
+      ? "URL"
+      : initial?.input_type === "IMAGE"
+        ? "IMAGE"
+        : "TEXT",
   );
   const [questionText, setQuestionText] = useState(
     initial?.question_text ?? "",
@@ -68,7 +77,13 @@ export default function QuestionForm({
   const [revisionStatus, setRevisionStatus] = useState<RevisionStatus>(
     initial?.revision_status ?? "NOT_STARTED",
   );
+
+  const [imageFile, setImageFile] = useState<File | null>(null);
+  const [imagePreview, setImagePreview] = useState<string | null>(null);
+  const [imageError, setImageError] = useState<string | null>(null);
+
   const [saving, setSaving] = useState(false);
+  const [busyStep, setBusyStep] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
 
@@ -106,14 +121,7 @@ export default function QuestionForm({
           setLocalTopics((prev) =>
             prev.some((t) => t.id === existing.id)
               ? prev
-              : [
-                  ...prev,
-                  {
-                    id: existing.id,
-                    subject,
-                    name: existing.name,
-                  },
-                ],
+              : [...prev, { id: existing.id, subject, name: existing.name }],
           );
           setSelectedTopicId(existing.id);
           setNewTopicName("");
@@ -131,10 +139,37 @@ export default function QuestionForm({
 
   function chooseInputType(t: InputType) {
     setInputType(t);
-    // Switching input type clears the now-irrelevant payload field so the
-    // database CHECK constraint stays satisfied on save.
-    if (t === "TEXT") setExternalUrl("");
-    else setQuestionText("");
+    // Switching types clears the now-irrelevant payload so the DB CHECK stays valid.
+    if (t === "TEXT") {
+      setExternalUrl("");
+      setImageFile(null);
+      if (imagePreview) URL.revokeObjectURL(imagePreview);
+      setImagePreview(null);
+    } else if (t === "URL") {
+      setQuestionText("");
+      setImageFile(null);
+      if (imagePreview) URL.revokeObjectURL(imagePreview);
+      setImagePreview(null);
+    } else {
+      setQuestionText("");
+      setExternalUrl("");
+    }
+  }
+
+  function onImageSelected(e: React.ChangeEvent<HTMLInputElement>) {
+    const f = e.target.files?.[0];
+    if (!f) return;
+    if (imagePreview) URL.revokeObjectURL(imagePreview);
+    setImagePreview(URL.createObjectURL(f));
+    setImageFile(f);
+    setImageError(null);
+  }
+
+  function clearImage() {
+    if (imagePreview) URL.revokeObjectURL(imagePreview);
+    setImagePreview(null);
+    setImageFile(null);
+    setImageError(null);
   }
 
   function validate(): string | null {
@@ -149,6 +184,9 @@ export default function QuestionForm({
     } else if (inputType === "URL") {
       if (!isValidHttpUrl(externalUrl.trim()))
         return "Enter a valid http(s) URL.";
+    } else if (inputType === "IMAGE") {
+      if (!imageFile && !initial?.image_path)
+        return "Please choose an image.";
     } else {
       return "Unsupported input type.";
     }
@@ -159,15 +197,41 @@ export default function QuestionForm({
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
     setSuccess(false);
+    setError(null);
+    setImageError(null);
     const v = validate();
     if (v) {
       setError(v);
       return;
     }
     setSaving(true);
-    setError(null);
+    const supabase = createClient();
+    const createId: string | undefined = initial?.id;
+    const previousImagePath: string | null = initial?.image_path ?? null;
+    let imagePath: string | null = null;
+    let uploadedPath: string | null = null;
+
     try {
-      const supabase = createClient();
+      if (inputType === "IMAGE") {
+        if (imageFile) {
+          setBusyStep("Preparing image…");
+          const { blob } = await processImageFile(imageFile);
+          setBusyStep("Uploading image…");
+          const idForPath = createId ?? crypto.randomUUID();
+          const fileName = createId
+            ? `${createId}-${crypto.randomUUID()}.jpg`
+            : `${idForPath}.jpg`;
+          const path = `${userId}/${fileName}`;
+          uploadedPath = await uploadQuestionImage(supabase, path, blob);
+          imagePath = uploadedPath;
+        } else if (previousImagePath) {
+          imagePath = previousImagePath;
+        } else {
+          throw new Error("Please choose an image.");
+        }
+      }
+
+      setBusyStep("Saving question…");
       const row: Record<string, unknown> = {
         student_id: userId,
         question_name: questionName.trim(),
@@ -178,40 +242,55 @@ export default function QuestionForm({
         input_type: inputType,
         question_text: inputType === "TEXT" ? questionText.trim() : null,
         external_url: inputType === "URL" ? externalUrl.trim() : null,
-        image_path: null,
+        image_path: inputType === "IMAGE" ? imagePath : null,
         notes: notes.trim() || null,
         revision_status: revisionStatus,
       };
-      if (initial?.id) row.id = initial.id;
+      if (createId) row.id = createId;
+      else if (inputType === "IMAGE" && imagePath) {
+        // For a brand-new IMAGE question the id must match the uploaded path.
+        row.id = imagePath.split("/")[1].replace(/\.jpg$/, "");
+      }
+
       const { error } = await supabase
         .from("important_questions")
         .upsert(row, { onConflict: "id" });
       if (error) throw error;
+
+      // Success: remove the old image only if it was replaced or converted away.
+      if (previousImagePath && previousImagePath !== imagePath) {
+        try {
+          await deleteQuestionImage(supabase, previousImagePath);
+        } catch {
+          setError(
+            `Question saved, but the previous image could not be deleted (orphan at ${previousImagePath}).`,
+          );
+        }
+      }
+
       setSuccess(true);
+      setBusyStep(null);
       onSaved?.();
     } catch (err) {
+      // If we uploaded a fresh image but the DB write failed, clean it up.
+      if (uploadedPath) {
+        try {
+          await deleteQuestionImage(supabase, uploadedPath);
+        } catch {
+          setError(
+            `Save failed and cleanup of the uploaded image also failed. Orphan at ${uploadedPath}.`,
+          );
+          setSaving(false);
+          setBusyStep(null);
+          return;
+        }
+      }
       setError(err instanceof Error ? err.message : "Failed to save.");
-    } finally {
+      setBusyStep(null);
       setSaving(false);
+      return;
     }
-  }
-
-  // Image questions are not editable in this phase; fail gracefully, no crash.
-  if (initial && initial.input_type === "IMAGE") {
-    return (
-      <div className="rounded-lg border border-zinc-200 p-3 text-sm text-zinc-500 dark:border-zinc-800">
-        This is an image question, which cannot be edited in this version yet.
-        {onCancel && (
-          <button
-            type="button"
-            onClick={onCancel}
-            className="ml-2 font-medium text-sky-600"
-          >
-            Close
-          </button>
-        )}
-      </div>
-    );
+    setSaving(false);
   }
 
   return (
@@ -322,7 +401,7 @@ export default function QuestionForm({
       <div className="flex flex-col gap-1 text-sm">
         <span className="text-zinc-600 dark:text-zinc-300">Input type</span>
         <div className="flex gap-2">
-          {(["TEXT", "URL"] as InputType[]).map((t) => (
+          {(["TEXT", "URL", "IMAGE"] as InputType[]).map((t) => (
             <button
               key={t}
               type="button"
@@ -336,14 +415,6 @@ export default function QuestionForm({
               {INPUT_TYPE_LABELS[t]}
             </button>
           ))}
-          <button
-            type="button"
-            disabled
-            title="Coming next"
-            className="flex-1 cursor-not-allowed rounded-lg border border-zinc-200 px-3 py-2 text-sm text-zinc-400 dark:border-zinc-800"
-          >
-            Image (soon)
-          </button>
         </div>
       </div>
 
@@ -372,6 +443,40 @@ export default function QuestionForm({
             className="rounded-lg border border-zinc-300 bg-white px-3 py-2 dark:border-zinc-700 dark:bg-zinc-900"
           />
         </label>
+      )}
+
+      {inputType === "IMAGE" && (
+        <div className="flex flex-col gap-2 text-sm">
+          <span className="text-zinc-600 dark:text-zinc-300">Image</span>
+          {imagePreview ? (
+            <div className="flex flex-col gap-2">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src={imagePreview}
+                alt="Selected preview"
+                className="max-h-64 rounded-lg border object-contain dark:border-zinc-800"
+              />
+              <button
+                type="button"
+                onClick={clearImage}
+                className="self-start text-sm font-medium text-red-600"
+              >
+                Remove image
+              </button>
+            </div>
+          ) : initial?.image_path ? (
+            <p className="text-sm text-zinc-500">
+              Current image is kept. Choose a new file to replace it.
+            </p>
+          ) : null}
+          <input
+            type="file"
+            accept="image/*"
+            onChange={onImageSelected}
+            className="text-sm"
+          />
+          {imageError && <p className="text-sm text-red-600">{imageError}</p>}
+        </div>
       )}
 
       <label className="flex flex-col gap-1 text-sm">
@@ -408,8 +513,11 @@ export default function QuestionForm({
       )}
       {success && (
         <p className="rounded-lg bg-emerald-50 px-3 py-2 text-sm text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300">
-          Saved.
+          {busyStep ? "Saving…" : "Question saved."}
         </p>
+      )}
+      {busyStep && !success && (
+        <p className="text-sm text-zinc-500">{busyStep}</p>
       )}
 
       <div className="flex gap-2">

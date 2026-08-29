@@ -20,6 +20,7 @@ export interface ImportantQuestion {
   input_type: InputType;
   question_text: string | null;
   external_url: string | null;
+  image_path: string | null;
   notes: string | null;
   revision_status: RevisionStatus;
   created_at: string;

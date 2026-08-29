@@ -39,6 +39,7 @@ export default async function QuestionDetailPage({
     input_type: q.input_type,
     question_text: q.question_text ?? null,
     external_url: q.external_url ?? null,
+    image_path: q.image_path ?? null,
     notes: q.notes ?? null,
     revision_status: q.revision_status,
     created_at: q.created_at,

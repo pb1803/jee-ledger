@@ -1,9 +1,11 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
+import { createClient } from "@/lib/supabase/client";
 import QuestionForm from "./question-form";
 import DeleteQuestionButton from "./delete-question-button";
+import { getSignedImageUrl } from "@/lib/image";
 import { prettySubject } from "@/lib/study";
 import {
   INPUT_TYPE_LABELS,
@@ -35,6 +37,24 @@ export default function QuestionDetail({
 }) {
   const router = useRouter();
   const [editing, setEditing] = useState(false);
+
+  const [imgUrl, setImgUrl] = useState<string | null>(null);
+  const [imgErr, setImgErr] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (question.input_type === "IMAGE" && question.image_path) {
+      const supabase = createClient();
+      let active = true;
+      getSignedImageUrl(supabase, question.image_path).then((url) => {
+        if (!active) return;
+        if (url) setImgUrl(url);
+        else setImgErr("Could not load image.");
+      });
+      return () => {
+        active = false;
+      };
+    }
+  }, [question.input_type, question.image_path]);
 
   return (
     <main className="mx-auto w-full max-w-md flex-1 p-4 pb-24">
@@ -100,10 +120,21 @@ export default function QuestionDetail({
             </a>
           )}
 
-          {question.input_type === "IMAGE" && (
-            <p className="mt-3 rounded-xl border border-zinc-200 p-4 text-sm text-zinc-500 dark:border-zinc-800">
-              Image questions are not supported in this version yet.
-            </p>
+          {question.input_type === "IMAGE" && question.image_path && (
+            <div className="mt-3 rounded-xl border border-zinc-200 p-2 dark:border-zinc-800">
+              {imgUrl ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img
+                  src={imgUrl}
+                  alt={question.question_name}
+                  className="w-full rounded-lg object-contain"
+                />
+              ) : (
+                <p className="p-4 text-sm text-zinc-500">
+                  {imgErr ?? "Loading image…"}
+                </p>
+              )}
+            </div>
           )}
 
           <div className="mt-4 flex gap-2">
@@ -114,7 +145,7 @@ export default function QuestionDetail({
             >
               Edit
             </button>
-            <DeleteQuestionButton id={question.id} />
+            <DeleteQuestionButton id={question.id} imagePath={question.image_path} />
           </div>
         </div>
       )}

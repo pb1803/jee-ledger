@@ -3,12 +3,15 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
+import { deleteQuestionImage } from "@/lib/image";
 
 export default function DeleteQuestionButton({
   id,
+  imagePath = null,
   onDeleted,
 }: {
   id: string;
+  imagePath?: string | null;
   onDeleted?: () => void;
 }) {
   const supabase = createClient();
@@ -17,16 +20,32 @@ export default function DeleteQuestionButton({
   const [error, setError] = useState<string | null>(null);
 
   async function onDelete() {
-    if (!window.confirm("Delete this important question? This cannot be undone."))
+    if (
+      !window.confirm("Delete this important question? This cannot be undone.")
+    )
       return;
     setBusy(true);
     setError(null);
     try {
+      // 1) Delete the database record first.
       const { error } = await supabase
         .from("important_questions")
         .delete()
         .eq("id", id);
       if (error) throw error;
+
+      // 2) Best-effort removal of the Storage object (if any).
+      if (imagePath) {
+        try {
+          await deleteQuestionImage(supabase, imagePath);
+        } catch {
+          setError(
+            `Question deleted, but its image could not be removed from storage (orphan at ${imagePath}).`,
+          );
+          setBusy(false);
+          return; // keep the user on the page so the orphan path is visible
+        }
+      }
       onDeleted?.();
       router.push("/questions");
     } catch (err) {
