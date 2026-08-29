@@ -67,6 +67,7 @@ export interface DashboardData {
   topics30Count: number;
   iq: IqSummary;
   goalTarget: number | null;
+  studyGoalMin: number | null;
   revisionDue: number;
 }
 
@@ -261,17 +262,26 @@ export async function getDashboardData(
   const topics7Count = recentTopics.filter((t) => t.lastDate >= days7[0]).length;
   const topics30Count = recentTopics.length;
 
-  // Daily QUESTIONS_SOLVED goal.
-  const { data: goal } = await supabase
+  // Daily goals (one per metric).
+  const { data: goals } = await supabase
     .from("goals")
-    .select("target_value")
+    .select("metric, target_value")
     .eq("student_id", userId)
-    .eq("frequency", "DAILY")
-    .eq("metric", "QUESTIONS_SOLVED")
-    .maybeSingle();
-  const goalTarget = goal
-    ? Number((goal as { target_value: unknown }).target_value)
-    : null;
+    .eq("frequency", "DAILY");
+  const goalTarget = goals
+    ? Number(
+        (goals.find((g) => g.metric === "QUESTIONS_SOLVED") as
+          | { target_value: unknown }
+          | undefined)?.target_value ?? NaN,
+      )
+    : NaN;
+  const studyGoalMin = goals
+    ? Number(
+        (goals.find((g) => g.metric === "STUDY_MINUTES") as
+          | { target_value: unknown }
+          | undefined)?.target_value ?? NaN,
+      )
+    : NaN;
 
   return {
     tz,
@@ -299,7 +309,8 @@ export async function getDashboardData(
     topics7Count,
     topics30Count,
     iq,
-    goalTarget,
+    goalTarget: Number.isNaN(goalTarget) ? null : goalTarget,
+    studyGoalMin: Number.isNaN(studyGoalMin) ? null : studyGoalMin,
     revisionDue: iq.due,
   };
 }

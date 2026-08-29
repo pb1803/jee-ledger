@@ -8,6 +8,19 @@ import type { ExamTarget, ProfileRow } from "@/lib/types";
 
 const EXAMS: ExamTarget[] = ["JEE_MAIN", "JEE_ADV", "MHT_CET"];
 
+// Curated, valid IANA timezones. A fixed list avoids accepting malformed
+// timezone strings while covering the regions a JEE student is likely in.
+const TIMEZONES = [
+  "Asia/Kolkata",
+  "Asia/Kathmandu",
+  "Asia/Dhaka",
+  "Asia/Colombo",
+  "Asia/Dubai",
+  "Asia/Singapore",
+  "Asia/Karachi",
+  "UTC",
+];
+
 export function ProfileForm({
   initial,
   email,
@@ -22,6 +35,9 @@ export function ProfileForm({
   );
   const [examTargets, setExamTargets] = useState<ExamTarget[]>(
     initial?.exam_targets ?? ["JEE_MAIN", "JEE_ADV", "MHT_CET"],
+  );
+  const [timezone, setTimezone] = useState<string>(
+    initial?.timezone || "Asia/Kolkata",
   );
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
@@ -58,6 +74,7 @@ export function ProfileForm({
         display_name: displayName,
         grade: Number(grade),
         exam_targets: examTargets,
+        timezone,
         updated_at: new Date().toISOString(),
       },
       { onConflict: "id" },
@@ -104,6 +121,21 @@ export function ProfileForm({
         >
           <option value="11">11</option>
           <option value="12">12</option>
+        </select>
+      </label>
+
+      <label className="flex flex-col gap-1 text-sm">
+        <span className="text-zinc-600 dark:text-zinc-300">Timezone</span>
+        <select
+          value={timezone}
+          onChange={(e) => setTimezone(e.target.value)}
+          className="rounded-lg border border-zinc-300 bg-white px-3 py-2 dark:border-zinc-700 dark:bg-zinc-900"
+        >
+          {TIMEZONES.map((tz) => (
+            <option key={tz} value={tz}>
+              {tz}
+            </option>
+          ))}
         </select>
       </label>
 

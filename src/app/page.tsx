@@ -298,33 +298,69 @@ export default async function DashboardPage() {
       <h2 className="mb-2 mt-5 text-sm font-semibold text-zinc-500">
         Daily goal
       </h2>
-      {d.goalTarget == null ? (
+      {d.goalTarget == null && d.studyGoalMin == null ? (
         <Card>
-          <p className="text-sm text-zinc-500">No daily question target set.</p>
+          <p className="text-sm text-zinc-500">No daily target set.</p>
           <Link
             href="/settings"
             className="mt-2 inline-block rounded-lg bg-sky-600 px-3 py-2 text-sm font-semibold text-white"
           >
-            Set a daily question target
+            Set a daily target
           </Link>
         </Card>
       ) : (
-        <Card>
-          <div className="flex items-center justify-between">
-            <span className="text-sm text-zinc-500">Today</span>
-            <span className="font-semibold tabular-nums">
-              {d.todayAttempted} / {d.goalTarget}
-            </span>
-          </div>
-          <div className="mt-2 h-2 overflow-hidden rounded-full bg-zinc-200 dark:bg-zinc-800">
-            <div
-              className="h-full rounded-full bg-sky-600"
-              style={{ width: `${goalPct ?? 0}%` }}
-            />
-          </div>
-          <p className="mt-1 text-xs text-zinc-400">
-            {goalPct == null ? "—" : `${Math.round(goalPct)}% of daily target`}
-          </p>
+        <Card className="flex flex-col gap-3">
+          {d.goalTarget != null && (
+            <div>
+              <div className="flex items-center justify-between">
+                <span className="text-sm text-zinc-500">Questions</span>
+                <span className="font-semibold tabular-nums">
+                  {d.todayAttempted} / {d.goalTarget}
+                </span>
+              </div>
+              <div className="mt-2 h-2 overflow-hidden rounded-full bg-zinc-200 dark:bg-zinc-800">
+                <div
+                  className="h-full rounded-full bg-sky-600"
+                  style={{ width: `${goalPct ?? 0}%` }}
+                />
+              </div>
+              <p className="mt-1 text-xs text-zinc-400">
+                {goalPct == null
+                  ? "—"
+                  : `${Math.round(goalPct)}% of daily question target`}
+              </p>
+            </div>
+          )}
+          {d.studyGoalMin != null && (
+            <div>
+              <div className="flex items-center justify-between">
+                <span className="text-sm text-zinc-500">Study time</span>
+                <span className="font-semibold tabular-nums">
+                  {formatMinutes(d.todayDurationMin)} / {formatMinutes(d.studyGoalMin)}
+                </span>
+              </div>
+              <div className="mt-2 h-2 overflow-hidden rounded-full bg-zinc-200 dark:bg-zinc-800">
+                <div
+                  className="h-full rounded-full bg-sky-600"
+                  style={{
+                    width: `${Math.min(
+                      100,
+                      d.studyGoalMin > 0
+                        ? (d.todayDurationMin / d.studyGoalMin) * 100
+                        : 0,
+                    )}%`,
+                  }}
+                />
+              </div>
+              <p className="mt-1 text-xs text-zinc-400">
+                {d.studyGoalMin > 0
+                  ? `${Math.round(
+                      Math.min(100, (d.todayDurationMin / d.studyGoalMin) * 100),
+                    )}% of daily study target`
+                  : "—"}
+              </p>
+            </div>
+          )}
         </Card>
       )}
     </main>
