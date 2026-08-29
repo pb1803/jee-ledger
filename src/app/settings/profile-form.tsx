@@ -1,9 +1,9 @@
 "use client";
 
 import { useState } from "react";
-import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { isOffline, OFFLINE_SAVE_MESSAGE } from "@/lib/network";
+import { SignOutButton } from "@/components/sign-out-button";
 import type { ExamTarget, ProfileRow } from "@/lib/types";
 
 const EXAMS: ExamTarget[] = ["JEE_MAIN", "JEE_ADV", "MHT_CET"];
@@ -21,14 +21,7 @@ const TIMEZONES = [
   "UTC",
 ];
 
-export function ProfileForm({
-  initial,
-  email,
-}: {
-  initial: ProfileRow | null;
-  email: string;
-}) {
-  const router = useRouter();
+export function ProfileForm({ initial }: { initial: ProfileRow | null }) {
   const [displayName, setDisplayName] = useState(initial?.display_name ?? "");
   const [grade, setGrade] = useState<string>(
     initial?.grade ? String(initial.grade) : "11",
@@ -84,24 +77,8 @@ export function ProfileForm({
     setSaving(false);
   }
 
-  async function onSignOut() {
-    const supabase = createClient();
-    await supabase.auth.signOut();
-    router.push("/login");
-  }
-
   return (
     <div className="flex flex-col gap-5">
-      <label className="flex flex-col gap-1 text-sm">
-        <span className="text-zinc-600 dark:text-zinc-300">Email</span>
-        <input
-          type="email"
-          value={email}
-          disabled
-          className="rounded-lg border border-zinc-200 bg-zinc-100 px-3 py-2 text-zinc-500 dark:border-zinc-800 dark:bg-zinc-900"
-        />
-      </label>
-
       <label className="flex flex-col gap-1 text-sm">
         <span className="text-zinc-600 dark:text-zinc-300">Display name</span>
         <input
@@ -173,13 +150,10 @@ export function ProfileForm({
         {saving ? "Saving…" : "Save profile"}
       </button>
 
-      <button
-        type="button"
-        onClick={onSignOut}
+      <SignOutButton
+        label="Lock app"
         className="rounded-lg border border-zinc-300 px-4 py-2.5 font-semibold text-zinc-600 transition-colors hover:bg-zinc-100 dark:border-zinc-700 dark:text-zinc-300 dark:hover:bg-zinc-900"
-      >
-        Sign out
-      </button>
+      />
     </div>
   );
 }

@@ -2,7 +2,6 @@ import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { ProfileForm } from "./profile-form";
 import { GoalForm } from "./goal-form";
-import { MentorsForm } from "./mentors-form";
 import type { ProfileRow } from "@/lib/types";
 
 export default async function SettingsPage() {
@@ -41,17 +40,12 @@ export default async function SettingsPage() {
 
       <section className="mb-6">
         <h2 className="mb-2 text-sm font-semibold text-zinc-500">Profile</h2>
-        <ProfileForm initial={profile as ProfileRow | null} email={user.email ?? ""} />
+        <ProfileForm initial={profile as ProfileRow | null} />
       </section>
 
       <section className="mb-6">
         <h2 className="mb-2 text-sm font-semibold text-zinc-500">Daily Goals</h2>
         <GoalForm userId={user.id} initialGoals={initialGoals} />
-      </section>
-
-      <section className="mb-6">
-        <h2 className="mb-2 text-sm font-semibold text-zinc-500">Mentors</h2>
-        <MentorsForm />
       </section>
     </main>
   );
