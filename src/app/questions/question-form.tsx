@@ -4,7 +4,6 @@ import { useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import type { Subject } from "@/lib/types";
 import {
-  INPUT_TYPE_LABELS,
   PRIORITY_LABELS,
   REVISION_LABELS,
   isValidHttpUrl,
@@ -19,6 +18,7 @@ import {
   processImageFile,
   uploadQuestionImage,
 } from "@/lib/image";
+import { preprocessImageForOcr, recognizeText } from "@/lib/ocr";
 
 const SUBJECTS: Subject[] = ["PHYSICS", "CHEMISTRY", "MATHEMATICS"];
 const PRIORITIES: Priority[] = ["LOW", "MEDIUM", "HIGH"];
@@ -82,6 +82,15 @@ export default function QuestionForm({
   const [imagePreview, setImagePreview] = useState<string | null>(null);
   const [imageError, setImageError] = useState<string | null>(null);
 
+  // OCR (Scan & Extract Text) state. The source photo lives only in browser
+  // memory and is never uploaded; the verified result is stored as TEXT.
+  const [ocrFile, setOcrFile] = useState<File | null>(null);
+  const [ocrPreview, setOcrPreview] = useState<string | null>(null);
+  const [ocrBusy, setOcrBusy] = useState(false);
+  const [ocrStatus, setOcrStatus] = useState<string | null>(null);
+  const [ocrError, setOcrError] = useState<string | null>(null);
+  const [ocrDuration, setOcrDuration] = useState<number | null>(null);
+
   const [saving, setSaving] = useState(false);
   const [busyStep, setBusyStep] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -140,6 +149,7 @@ export default function QuestionForm({
   function chooseInputType(t: InputType) {
     setInputType(t);
     // Switching types clears the now-irrelevant payload so the DB CHECK stays valid.
+    clearOcrPhoto();
     if (t === "TEXT") {
       setExternalUrl("");
       setImageFile(null);
@@ -153,6 +163,57 @@ export default function QuestionForm({
     } else {
       setQuestionText("");
       setExternalUrl("");
+    }
+  }
+
+  function onOcrImageSelected(e: React.ChangeEvent<HTMLInputElement>) {
+    const f = e.target.files?.[0];
+    if (!f) return;
+    if (ocrPreview) URL.revokeObjectURL(ocrPreview);
+    setOcrFile(f);
+    setOcrPreview(URL.createObjectURL(f));
+    setOcrError(null);
+    setOcrStatus(null);
+    setOcrDuration(null);
+  }
+
+  function clearOcrPhoto() {
+    if (ocrPreview) URL.revokeObjectURL(ocrPreview);
+    setOcrFile(null);
+    setOcrPreview(null);
+    setOcrBusy(false);
+    setOcrStatus(null);
+    setOcrError(null);
+    setOcrDuration(null);
+  }
+
+  async function runOcr() {
+    if (!ocrFile) {
+      setOcrError("Please choose a photo first.");
+      return;
+    }
+    setOcrBusy(true);
+    setOcrError(null);
+    setOcrDuration(null);
+    setOcrStatus("Preparing image…");
+    try {
+      const blob = await preprocessImageForOcr(ocrFile, {
+        grayscale: true,
+        contrast: true,
+      });
+      const { text, durationMs } = await recognizeText(blob, setOcrStatus);
+      setQuestionText(text);
+      setOcrDuration(durationMs);
+      setOcrStatus(null);
+    } catch (err) {
+      setOcrError(
+        err instanceof Error
+          ? err.message
+          : "Could not read the question. Try a clearer, well-lit photo.",
+      );
+      setOcrStatus(null);
+    } finally {
+      setOcrBusy(false);
     }
   }
 
@@ -399,36 +460,128 @@ export default function QuestionForm({
       </div>
 
       <div className="flex flex-col gap-1 text-sm">
-        <span className="text-zinc-600 dark:text-zinc-300">Input type</span>
-        <div className="flex gap-2">
-          {(["TEXT", "URL", "IMAGE"] as InputType[]).map((t) => (
+        <span className="text-zinc-600 dark:text-zinc-300">
+          How do you want to add it?
+        </span>
+        <div className="flex flex-col gap-2">
+          {(
+            [
+              {
+                type: "IMAGE" as InputType,
+                title: "Add Image",
+                desc: "For questions where the visual format matters.",
+              },
+              {
+                type: "TEXT" as InputType,
+                title: "Scan & Extract Text",
+                desc: "For plain text questions.",
+              },
+              {
+                type: "URL" as InputType,
+                title: "Add URL",
+                desc: "For questions available elsewhere online.",
+              },
+            ]
+          ).map((m) => (
             <button
-              key={t}
+              key={m.type}
               type="button"
-              onClick={() => chooseInputType(t)}
-              className={`flex-1 rounded-lg border px-3 py-2 text-sm font-medium ${
-                inputType === t
+              onClick={() => chooseInputType(m.type)}
+              className={`rounded-lg border px-3 py-2 text-left ${
+                inputType === m.type
                   ? "border-sky-600 bg-sky-600 text-white"
-                  : "border-zinc-300 text-zinc-500 dark:border-zinc-700"
+                  : "border-zinc-300 text-zinc-700 dark:border-zinc-700 dark:text-zinc-300"
               }`}
             >
-              {INPUT_TYPE_LABELS[t]}
+              <span className="block text-sm font-medium">{m.title}</span>
+              <span
+                className={`block text-xs ${
+                  inputType === m.type
+                    ? "text-sky-100"
+                    : "text-zinc-500 dark:text-zinc-400"
+                }`}
+              >
+                {m.desc}
+              </span>
             </button>
           ))}
         </div>
       </div>
 
       {inputType === "TEXT" && (
-        <label className="flex flex-col gap-1 text-sm">
-          <span className="text-zinc-600 dark:text-zinc-300">Question text</span>
-          <textarea
-            value={questionText}
-            onChange={(e) => setQuestionText(e.target.value)}
-            rows={6}
-            placeholder="Paste or type the question…"
-            className="rounded-lg border border-zinc-300 bg-white px-3 py-2 font-mono text-sm dark:border-zinc-700 dark:bg-zinc-900"
-          />
-        </label>
+        <div className="flex flex-col gap-3 text-sm">
+          <div className="flex flex-col gap-2 rounded-lg border border-zinc-200 p-3 dark:border-zinc-800">
+            <span className="font-medium text-zinc-600 dark:text-zinc-300">
+              Scan from a photo (optional)
+            </span>
+            {ocrPreview ? (
+              <div className="flex flex-col gap-2">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  src={ocrPreview}
+                  alt="OCR source preview"
+                  className="max-h-64 rounded-lg border object-contain dark:border-zinc-800"
+                />
+                {ocrBusy ? (
+                  <p className="text-sm text-zinc-500">{ocrStatus}</p>
+                ) : (
+                  <div className="flex gap-2">
+                    <button
+                      type="button"
+                      onClick={runOcr}
+                      disabled={ocrBusy}
+                      className="rounded-lg bg-sky-600 px-3 py-2 text-sm font-medium text-white disabled:opacity-60"
+                    >
+                      Scan text
+                    </button>
+                    <button
+                      type="button"
+                      onClick={clearOcrPhoto}
+                      className="rounded-lg border border-zinc-300 px-3 py-2 text-sm font-medium dark:border-zinc-700"
+                    >
+                      Remove photo
+                    </button>
+                  </div>
+                )}
+                {ocrError && (
+                  <p className="text-sm text-red-600" role="alert">
+                    {ocrError}
+                  </p>
+                )}
+                {ocrDuration !== null && !ocrBusy && (
+                  <p className="text-xs text-zinc-500">
+                    OCR completed in {(ocrDuration / 1000).toFixed(1)} seconds
+                  </p>
+                )}
+              </div>
+            ) : (
+              <input
+                type="file"
+                accept="image/*"
+                capture="environment"
+                onChange={onOcrImageSelected}
+                className="text-sm"
+              />
+            )}
+          </div>
+
+          <label className="flex flex-col gap-1 text-sm">
+            <span className="text-zinc-600 dark:text-zinc-300">
+              Question text
+            </span>
+            <textarea
+              value={questionText}
+              onChange={(e) => setQuestionText(e.target.value)}
+              rows={6}
+              placeholder="Type, paste, or scan the question…"
+              className="rounded-lg border border-zinc-300 bg-white px-3 py-2 font-mono text-sm dark:border-zinc-700 dark:bg-zinc-900"
+            />
+          </label>
+          <p className="text-xs text-amber-700 dark:text-amber-400">
+            Please check the extracted text before saving — mathematical symbols
+            and diagrams may not be recognized correctly.
+          </p>
+        </div>
       )}
 
       {inputType === "URL" && (
