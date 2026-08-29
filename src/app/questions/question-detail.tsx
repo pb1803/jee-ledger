@@ -8,6 +8,7 @@ import DeleteQuestionButton from "./delete-question-button";
 import { getSignedImageUrl } from "@/lib/image";
 import { recordRevision, type RevisionRecord } from "@/lib/revisions";
 import { prettySubject } from "@/lib/study";
+import { isOffline, OFFLINE_SAVE_MESSAGE } from "@/lib/network";
 import {
   INPUT_TYPE_LABELS,
   PRIORITY_LABELS,
@@ -57,6 +58,11 @@ export default function QuestionDetail({
     if (!outcome) return;
     setSavingRev(true);
     setRevErr(null);
+    if (isOffline()) {
+      setRevErr(OFFLINE_SAVE_MESSAGE);
+      setSavingRev(false);
+      return;
+    }
     try {
       const supabase = createClient();
       await recordRevision(supabase, question.id, outcome, revNotes);

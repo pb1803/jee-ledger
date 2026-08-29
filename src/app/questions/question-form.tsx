@@ -19,6 +19,7 @@ import {
   uploadQuestionImage,
 } from "@/lib/image";
 import { preprocessImageForOcr, recognizeText } from "@/lib/ocr";
+import { isOffline, OFFLINE_SAVE_MESSAGE } from "@/lib/network";
 
 const SUBJECTS: Subject[] = ["PHYSICS", "CHEMISTRY", "MATHEMATICS"];
 const PRIORITIES: Priority[] = ["LOW", "MEDIUM", "HIGH"];
@@ -260,6 +261,10 @@ export default function QuestionForm({
     setSuccess(false);
     setError(null);
     setImageError(null);
+    if (isOffline()) {
+      setError(OFFLINE_SAVE_MESSAGE);
+      return;
+    }
     const v = validate();
     if (v) {
       setError(v);

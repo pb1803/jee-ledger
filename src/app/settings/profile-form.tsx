@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
+import { isOffline, OFFLINE_SAVE_MESSAGE } from "@/lib/network";
 import type { ExamTarget, ProfileRow } from "@/lib/types";
 
 const EXAMS: ExamTarget[] = ["JEE_MAIN", "JEE_ADV", "MHT_CET"];
@@ -36,6 +37,11 @@ export function ProfileForm({
   async function onSave() {
     setSaving(true);
     setMessage(null);
+    if (isOffline()) {
+      setMessage(OFFLINE_SAVE_MESSAGE);
+      setSaving(false);
+      return;
+    }
     const supabase = createClient();
     const {
       data: { user },

@@ -32,11 +32,17 @@ export function BottomNav() {
           return (
             <li key={item.href} className="flex-1">
               {item.enabled ? (
-                <Link href={item.href} className={className}>
+                <Link
+                  href={item.href}
+                  aria-current={active ? "page" : undefined}
+                  className={`${className} min-h-[48px] py-3`}
+                >
                   {item.label}
                 </Link>
               ) : (
-                <span className={`${className} opacity-40`}>{item.label}</span>
+                <span className={`${className} min-h-[48px] py-3 opacity-40`}>
+                  {item.label}
+                </span>
               )}
             </li>
           );

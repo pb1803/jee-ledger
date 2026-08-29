@@ -12,6 +12,7 @@ import {
   type Stat,
   type SubjectStats,
 } from "@/lib/study";
+import { isOffline, OFFLINE_SAVE_MESSAGE } from "@/lib/network";
 import type { Subject } from "@/lib/types";
 
 const SUBJECTS: Subject[] = ["PHYSICS", "CHEMISTRY", "MATHEMATICS"];
@@ -297,6 +298,10 @@ export default function DailyLogForm({ userId }: { userId: string }) {
 
   const onSave = async () => {
     setSuccess(false);
+    if (isOffline()) {
+      setError(OFFLINE_SAVE_MESSAGE);
+      return;
+    }
     const v = validate();
     if (v) {
       setError(v);
