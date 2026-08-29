@@ -8,6 +8,7 @@ const ITEMS = [
   { href: "/daily-log", label: "Log", enabled: true },
   { href: "/questions", label: "Questions", enabled: true },
   { href: "/revision", label: "Revise", enabled: true },
+  { href: "/analytics", label: "Stats", enabled: true },
   { href: "/settings", label: "Settings", enabled: true },
 ];
 
