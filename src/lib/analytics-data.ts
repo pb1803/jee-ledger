@@ -69,6 +69,7 @@ export interface DashboardData {
   goalTarget: number | null;
   studyGoalMin: number | null;
   revisionDue: number;
+  studentName: string | null;
 }
 
 function emptyIqBySubject(): IqSummary["bySubject"] {
@@ -85,10 +86,11 @@ export async function getDashboardData(
 ): Promise<DashboardData> {
   const { data: profile } = await supabase
     .from("profile")
-    .select("timezone")
+    .select("timezone, display_name")
     .eq("id", userId)
     .maybeSingle();
   const tz = (profile?.timezone as string) || "Asia/Kolkata";
+  const studentName = (profile?.display_name as string) || null;
   const today = todayInTZ(tz);
 
   // All daily logs for the student (used for streaks + range counts).
@@ -312,5 +314,6 @@ export async function getDashboardData(
     goalTarget: Number.isNaN(goalTarget) ? null : goalTarget,
     studyGoalMin: Number.isNaN(studyGoalMin) ? null : studyGoalMin,
     revisionDue: iq.due,
+    studentName,
   };
 }

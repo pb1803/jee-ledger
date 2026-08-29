@@ -10,6 +10,7 @@ export default function LoginPage() {
   const router = useRouter();
 
   const [mode, setMode] = useState<Mode>("signin");
+  const [role, setRole] = useState<"STUDENT" | "VIEWER">("STUDENT");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [displayName, setDisplayName] = useState("");
@@ -29,11 +30,16 @@ export default function LoginPage() {
         const { data, error } = await supabase.auth.signUp({
           email,
           password,
-          options: { data: { display_name: displayName || email } },
+          options: {
+            data: {
+              display_name: displayName || email,
+              role,
+            },
+          },
         });
         if (error) throw error;
         if (data.session) {
-          router.push("/");
+          router.push(role === "VIEWER" ? "/parent" : "/");
           router.refresh();
         } else {
           setMessage("Check your email to confirm your account, then sign in.");
@@ -75,6 +81,39 @@ export default function LoginPage() {
               placeholder="Mithilesh"
             />
           </label>
+        )}
+
+        {mode === "signup" && (
+          <div className="flex flex-col gap-1 text-sm">
+            <span className="text-zinc-600 dark:text-zinc-300">I am a</span>
+            <div className="grid grid-cols-2 gap-2">
+              {(
+                [
+                  ["STUDENT", "Student"],
+                  ["VIEWER", "Parent / Mentor"],
+                ] as const
+              ).map(([value, label]) => (
+                <button
+                  key={value}
+                  type="button"
+                  onClick={() => setRole(value)}
+                  className={`rounded-lg border px-3 py-2 text-sm font-medium transition-colors ${
+                    role === value
+                      ? "border-sky-500 bg-sky-50 text-sky-700 dark:bg-sky-950 dark:text-sky-300"
+                      : "border-zinc-300 text-zinc-600 dark:border-zinc-700 dark:text-zinc-300"
+                  }`}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+            {role === "VIEWER" && (
+              <p className="text-xs text-zinc-500">
+                A student must grant you access from their Settings before you
+                can view their data.
+              </p>
+            )}
+          </div>
         )}
 
         <label className="flex flex-col gap-1 text-sm">

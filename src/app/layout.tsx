@@ -2,8 +2,10 @@ import type { Metadata, Viewport } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import { BottomNav } from "@/components/bottom-nav";
+import { ViewerNav } from "@/components/viewer-nav";
 import { PwaRegister } from "@/components/pwa-register";
 import { OfflineBanner } from "@/components/offline-banner";
+import { getCurrentUser } from "@/lib/auth";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -34,9 +36,12 @@ export const viewport: Viewport = {
   viewportFit: "cover",
 };
 
-export default function RootLayout({
+export default async function RootLayout({
   children,
 }: Readonly<{ children: React.ReactNode }>) {
+  const user = await getCurrentUser();
+  const isViewer = user?.role === "VIEWER";
+
   return (
     <html
       lang="en"
@@ -46,7 +51,7 @@ export default function RootLayout({
         <PwaRegister />
         <OfflineBanner />
         <div className="flex-1">{children}</div>
-        <BottomNav />
+        {isViewer ? <ViewerNav /> : <BottomNav />}
       </body>
     </html>
   );
