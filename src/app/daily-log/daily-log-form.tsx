@@ -101,26 +101,70 @@ export default function DailyLogForm({ userId }: { userId: string }) {
   const addTopic = async (subject: Subject) => {
     const name = newTopic[subject].trim();
     if (!name) return;
-    const existing = allTopics.find(
+
+    // Fast-path: skip the insert if we already know about this topic.
+    const known = allTopics.find(
       (t) =>
         t.subject === subject && t.name.toLowerCase() === name.toLowerCase(),
     );
-    let topicId: string;
-    if (existing) {
-      topicId = existing.id;
-    } else {
-      const { data, error: insErr } = await supabase
-        .from("topics")
-        .insert({ student_id: userId, subject, name })
-        .select("id")
-        .single();
-      if (insErr) {
-        setError(insErr.message);
-        return;
-      }
-      topicId = (data as { id: string }).id;
-      setAllTopics((prev) => [...prev, { id: topicId, subject, name }]);
+    if (known) {
+      setNewTopic((prev) => ({ ...prev, [subject]: "" }));
+      setSelectedTopics((prev) =>
+        prev[subject].includes(known.id)
+          ? prev
+          : { ...prev, [subject]: [...prev[subject], known.id] },
+      );
+      return;
     }
+
+    const { data, error: insErr } = await supabase
+      .from("topics")
+      .insert({ student_id: userId, subject, name })
+      .select("id, name")
+      .single();
+
+    if (insErr) {
+      // A concurrent insert of the same (case-insensitive) topic can hit the
+      // DB-level unique constraint. Recover by selecting the existing row
+      // instead of showing a generic error.
+      if (insErr.code === "23505") {
+        const { data: existingList } = await supabase
+          .from("topics")
+          .select("id, subject, name")
+          .eq("student_id", userId)
+          .eq("subject", subject);
+        const existing = (existingList ?? []).find(
+          (t) => t.name.toLowerCase() === name.toLowerCase(),
+        );
+        if (existing) {
+          const tid = (existing as { id: string }).id;
+          setAllTopics((prev) =>
+            prev.some((t) => t.id === tid)
+              ? prev
+              : [
+                  ...prev,
+                  {
+                    id: tid,
+                    subject,
+                    name: (existing as { name: string }).name,
+                  },
+                ],
+          );
+          setNewTopic((prev) => ({ ...prev, [subject]: "" }));
+          setSelectedTopics((prev) =>
+            prev[subject].includes(tid)
+              ? prev
+              : { ...prev, [subject]: [...prev[subject], tid] },
+          );
+          return;
+        }
+      }
+      setError(`Could not add topic "${name}". ${insErr.message}`);
+      return;
+    }
+
+    const topicId = (data as { id: string }).id;
+    setAllTopics((prev) => [...prev, { id: topicId, subject, name }]);
     setNewTopic((prev) => ({ ...prev, [subject]: "" }));
     setSelectedTopics((prev) =>
       prev[subject].includes(topicId)
